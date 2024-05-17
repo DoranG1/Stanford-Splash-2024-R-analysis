@@ -1,0 +1,80 @@
+
+```{r}
+
+# Use dyplr::mutate() to create a new variable that encodes each unique community.
+# There should be 4*3*3=36 unique values of this new variable.
+data <- data %>% 
+  mutate(community = paste(src_community, passage, abxConcentration, sep="_"))
+unique(data$community)
+```
+
+```{r}
+# Use ggplot to plot a histogram of the raw counts of each OTU across all samples.
+
+# Set a plot theme from the cowplot package.
+theme_set(theme_cowplot())
+
+data %>% 
+  # Create a new ggplot canvas.
+  ggplot() +
+  # Draw a histogram on the plot canvas.
+  # Aesthetic automatically draws column names from the dataframe you pass to ggplot().
+  geom_histogram(aes(x=count))
+
+# Remove count values of 0 and replot.
+data %>% 
+  # Use dplyr::filter() to remove 0 values.
+  filter(count != 0) %>% 
+  ggplot() +
+  # Also plot counts on a log10 scale to make them easier to visualize.
+  geom_histogram(aes(x=log10(count)))
+```
+
+```{r}
+# Plot OTU counts for each sample.
+
+# Add an OTU count variable.
+dataOTUcounts <- data %>% 
+  # Remove rows where the OTU is not actually present.
+  filter(count > 0) %>% 
+  # Group by our new variable that encodes each unique community.
+  group_by(community) %>% 
+  # Create a new dataframe with the OTUcount variable that counts the number of observations in each group.
+  summarize(OTUcount = n())
+```
+
+```{r}
+# Plot the OTU counts for each sample.
+
+# First, plot just the 0 ug/mL antibiotic concentration.
+p_OTUcounts_0ug <- dataOTUcounts %>% 
+  # Filter to only samples with antibiotic concentration 0 ug/mL.
+  filter(abxConcentration == 0) %>% 
+  # Create a new ggplot canvas.
+  ggplot() +
+  # Draw a line plot on the canvas.
+  geom_line(aes(x = factor(passage), y = OTUcount, group = src_community, color = src_community)) +
+  # X-axis label.
+  xlab("Passage") +
+  # Y-axis label.
+  ylab("OTU count") +
+  # Plot title.
+  ggtitle("OTU counts, 0 ug/mL")
+p_OTUcounts_0ug
+```
+
+```{r}
+# Now plot all four antibiotic concentrations using the facet_wrap() function.
+p_OTUcounts_allConcentrations <- dataOTUcounts %>% 
+  ggplot() +
+  geom_line(aes(x = factor(passage), y = OTUcount, group = src_community, color = src_community)) +
+  xlab("Passage") +
+  ylab("OTU count") +
+  ggtitle("OTU counts") +
+  # Separate plots into different panels based on antibiotic concentration.
+  facet_wrap(~abxConcentration) +
+  # Set legend title and colors manually.
+  scale_color_manual(name = "Source community",
+                     values = c("blue", "red", "green", "purple"))
+p_OTUcounts_allConcentrations
+```

@@ -1,0 +1,379 @@
+```{r}
+# Load the required dplyr and ggplot2 packages as part of the tidyverse wrapper.
+
+# If you don't have tidyverse installed, run the following code just once:
+# install.packages('tidyverse')
+# Now run library() to load the package.
+library(tidyverse)
+```
+
+```{r}
+# Import the OTU data.
+data <- read.table("data/data.tsv", header=TRUE, sep="\t")
+view(data)
+# Access the first six rows of the dataframe.
+head(data)
+# Print the unique values of the three variables that define each unique community.
+unique(data$src_community)
+unique(data$passage)
+unique(data$abxConcentration)
+```
+
+```{r}
+# Use ggplot to plot a histogram of the raw counts of each OTU across all samples.
+
+# Set a plot theme from the cowplot package.
+theme_set(theme_cowplot())
+
+data %>% 
+  # Create a new ggplot canvas.
+  ggplot() +
+  # Draw a histogram on the plot canvas.
+  # Aesthetic automatically draws column names from the dataframe you pass to ggplot().
+  geom_histogram(aes(x=count))
+
+# Remove count values of 0 and replot.
+data %>% 
+  # Use dplyr::filter() to remove 0 values.
+  filter(count != 0) %>% 
+  ggplot() +
+  # Also plot counts on a log10 scale to make them easier to visualize.
+  geom_histogram(aes(x=log10(count)))
+
+# Retrieve the log10 counts with 0s removed.
+logCounts <- log10(
+  data %>% 
+  filter(count != 0) %>% 
+  pull(count)
+  )
+# Summarize the log10 distribution of counts across all samples.
+summary(logCounts)
+```
+
+```{r}
+# Plot the diversity of OTUs within each sample.
+
+# Add an OTU diversity count variable.
+dataOTUcounts <- data %>%
+  # Remove rows where OTUs are not actually present.
+  filter(count > 0) %>% 
+  # Group by the three variables that encode each unique community.
+  group_by(src_community, passage, abxConcentration) %>% 
+  # Use dyplr::summarize to create a new dataframe with the OTUcount variable that counts the number of     observations in each group.
+  # dplyr::summarize() will create a new variable for each group, and include each grouping variable.
+  summarize(OTUcount = n())
+```
+
+```{r}
+# Plot the OTU counts for each sample.
+
+# First, plot just the 0 ug/mL antibiotic concentration.
+dataOTUcounts %>% 
+  # Filter to only samples with antibiotic concentration 0 ug/mL.
+  filter(abxConcentration == 0) %>% 
+  ggplot() +
+  # Draw a line plot on the canvas.
+  geom_line(aes(x = factor(passage), y = OTUcount, group = src_community, color = src_community)) +
+  # X-axis label.
+  xlab("Passage") +
+  # Y-axis label.
+  ylab("OTU count") +
+  # Y-axis scale.
+  ylim(0, 150) +
+  # Plot title.
+  ggtitle("OTU counts, 0 ug/mL")
+
+# Now plot all three antibiotic concentrations using the facet_wrap() function.
+dataOTUcounts %>% 
+  ggplot() +
+  geom_line(aes(x = factor(passage), y = OTUcount, group = src_community, color = src_community)) +
+  xlab("Passage") +
+  ylab("OTU diversity") +
+  ylim(0, 150) +
+  ggtitle("OTU counts") +
+  # Separate plots into different panels based on antibiotic concentration.
+  facet_wrap(~abxConcentration) +
+  # Set legend title and colors manually.
+  scale_color_manual(name = "Source community",
+                     values = c("blue", "red", "green", "purple"))
+```
+
+```{r}
+# To plot compositional data, we need to know the relative abundance that each OTU makes up in each community.
+
+data <- data %>% 
+  # Group by each unique community.
+  group_by(src_community, passage, abxConcentration) %>% 
+  # Use dplyr::mutate() to add a new relative abundance variable for each OTU.
+  mutate(relAb = count / sum(count))
+```
+
+```{r}
+# Install and load the 'cowplot' package which adds extra customization for plot aesthetics.
+#install.packages('cowplot')
+library(cowplot)
+# Set default cowplot plot theme.
+theme_set(theme_cowplot())
+
+# Plot the composition of an example community A at passage 7 with antibiotic concentration 2 ug/mL.
+p_relAb <- data %>% 
+  filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
+  ggplot() +
+  # Plot a stacked bar plot where species relative abundances are separated by black lines and colored by family.
+  geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black")
+p_relAb
+
+## Note the legend is currently way too large to see the plot! Using cowplot we can extract and plot the legend separately, and replot the main plot without the legend.
+
+relAbLegend <- get_legend(p_relAb)
+data %>% 
+  filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
+  ggplot() +
+  geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
+  # Hide the plot legend.
+  theme(legend.position = "none")
+
+## We can also import our own color palette.
+# Import color palette file.
+read.table("config/palette.txt", header = TRUE, stringsAsFactors = FALSE)
+# Convert the color palette to a named vector for ggplot to map family IDs to color hexes.
+paletteVector <- palette$hex
+names(paletteVector) <- palette$Family
+
+# Replot with our custom palette, now showing the legend.
+data %>% 
+  filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
+  ggplot() +
+  geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
+  scale_fill_manual(values = paletteVector)
+
+## Now try plotting multiple communities at once: include all passages (as the x variable) and antibiotic concentrations (as a faceting variable) from source community A.
+p_relAbAllA <- data
+  ### Your code here.
+p_relAbAllA
+# Save your plot using the following code: it should look identical to the one in plotExamples/relAbAllA.png.
+save_plot("plotOutputs/relAbAllA.png", p_relAbAllA, nrow = 1.5, ncol = 3)
+
+## You can also facet by multiple variables at a time using facet_grid(~x~y). Try plotting all passages and antibiotic communities from all four source communities at once:
+p_relAbAllCommunities <- data
+  ### Your code here.
+p_relAbAllCommunities
+# Your plot should look identical to plotExamples/relAbAllCommunities.png
+save_plot("plotOutputs/relAbAllCommunities.png", p_relAbAllCommunities, nrow = 2, ncol = 3)
+```
+
+```{r}
+## A common feature of microbiome sequencing data is a 'limit of detection,' which is the lowest abundance of a species that can be reliably detected given the sequencing depth. For instance, these samples each received at least 10^4 reads, so if we want at least 10 reads per species per sample, we should set our inferred detection limit to 10^-3 relative abundance per species.
+
+# Try filtering the data to include only species present above 10^-3 relative abundance, and re-calculate the OTU diversity within each community based on this filtered data.
+# Your final plot should look identical to the one in plotExamples/OTUcountsFiltered.png
+dataOTUcountsFiltered <- data
+  ### Your code here.
+
+p_OTUcountsFiltered <- dataOTUcountsFiltered
+  ### Your code here.
+p_OTUcountsFiltered
+save_plot("plotOutputs/OTUcountsFiltered.png", p_OTUcountsFiltered)
+```
+
+```{r}
+## R is also commonly used to perform statistical tests like linear regressions or t-tests. Let's plot and check the correlation between relative abundance values for the same OTUs across different antibiotic concentrations of a community at the same passage.
+
+## To plot this, we need our data to be in the wide, rather than the long format.
+dataWideCommAP2 <- data %>% 
+  # Compare just the A community and passage 2.
+  filter(src_community=="A" & passage==2) %>% 
+  # Use dplyr::pivot_wider() to separate the abxConcentration column into three.
+  pivot_wider(id_cols = c(OTU, Family), names_from = "abxConcentration", values_from = "relAb")
+view(dataWideCommAP2)
+
+# Now we can plot a comparison of the relative abundances of each ASV in this community at the 0 vs 2 ug/mL antibiotic concentrations.
+dataWideCommAP2 %>% 
+  # Plot only non-zero relative abundances.
+  filter(`0` != 0 | `2` != 0) %>% 
+  ggplot() +
+  geom_point(aes(x = `0`, y = `2`, color = Family)) +
+  # Plot a y=x line for comparison.
+  geom_abline(aes(slope = 1, intercept = 0), linetype = "dotted") +
+  xlim(0, 0.5) +
+  ylim(0, 0.5) +
+  scale_color_manual(values = paletteVector) +
+  xlab("Relative abundance, 0 ug/mL") +
+  ylab("Relative abundance, 2 ug/mL")
+
+# Calculate the correlation between relative abundances at 0 vs. 2 ug/mL.
+commAP0P2cor <- lm((dataWideCommAP2 %>% filter(`0` != 0 | `2` != 0))$`2` ~ 
+                     (dataWideCommAP2 %>% filter(`0` != 0 | `2` != 0))$`0`)
+summary(commAP0P2cor)
+# Extract the r-squared value from the correlation test.
+commAP0P2_r2 <- summary(commAP0P2cor)$r.squared
+# Round the r-squared value to 2 decimal places.
+commAP0P2_r2 <- round(commAP0P2_r2, 2)
+
+# You can use geom_text() to draw text labels directly on a plot.
+R2label <- paste0("R2 = ", commAP0P2_r2)
+
+dataWideCommAP2 %>% 
+  filter(`0` != 0 | `2` != 0) %>%
+  ggplot() +
+  geom_point(aes(x = `0`, y = `2`, color = Family)) +
+  geom_abline(aes(slope = 1, intercept = 0), linetype = "dotted") +
+  # Draw the text label in the top-left corner.
+  geom_text(aes(x = 0.4, y = 0.45, label = R2label)) +
+  xlim(0, 0.5) +
+  ylim(0, 0.5) +
+  scale_color_manual(values = paletteVector) +
+  xlab("Relative abundance, 0 ug/mL") +
+  ylab("Relative abundance, 2 ug/mL")
+```
+
+```{r}
+## Now try plotting your own scatterplot comparing OTU counts between 0 and 2 ug/mL for all communities at passage 2, and add an R2 value to the plot. Use the OTU counts that have been filtered to at least 10^-3 relative abundance. Note that with only four points, a correlation test is not the best way to analyze this data, so we are just using it for practice.
+dataWideP2OTUCount <- dataOTUcountsFiltered
+  ### Your code here.
+
+P0P2OTUcountCor <- lm()
+  ### Your code here.
+
+# Your final plot should look identical (or similar) to plotExamples/OTUcountScatterP2.png
+p_OTUcountScatterP2 <- dataWideP2OTUCount
+  ### Your code here.
+p_OTUcountScatterP2
+save_plot("plotOutputs/OTUcountScatterP2.png", p_OTUcountScatterP2)
+```
+
+```{r}
+## Let's get into the weeds of the data a little more. We'll now plot the relative abundances of individual OTUs in communities to see how different species may have been affected by the antibiotic treatment. 
+
+# First add a numeric identifier to OTUs within each family to make them easier to distinguish.
+dataOTUs <- data %>%
+  filter(count >= 1) %>% 
+  group_by(OTU) %>% 
+  mutate(OTUnum = cur_group_id(),
+         OTUID = paste(Family, OTUnum, sep="-"))
+
+# Start with an example OTU to plot.
+OTUexample <- "Lachnospiraceae-309"
+  
+## Try plotting this OTU's log10 relative abundance with passages on the x-axis, different lines for antibiotic concentrations, and faceted by community! Your final plot should look similar to plotExamples/exampleOTUabundance.png.
+p_exampleOTUabundance <- dataOTUs
+  ### Your code here.
+
+## You might notice that in this plot, we are continuing to include several relative abundance values below 10^-3, which is below our chosen limit of detection, and that there are also some points missing where the OTU was simply not detected in a sample. Let's fix the first issue by setting values of relAb that are below 10^-3 to 10^-3 in the data.
+dataOTUs <- dataOTUs %>%
+  # Use dplyr::ifelse() within mutate() to add different values of the new column based on a pre-existing column.
+  # By naming the new column the same as a pre-existing column, we will overwrite the pre-existing column.
+  mutate(relAb = ifelse(relAb < 10^-3, 10^-3, relAb))
+
+## To resolve the second issue, we will use the handy dplyr::complete() function, which fills a dataframe with all possible combinations of the given set of variables.
+dataOTUs <- dataOTUs %>% 
+  complete(src_community = c("A", "B", "C", "D"), 
+           passage = c(1, 2, 7), 
+           abxConcentration = c(0, 2, 8), 
+           OTUID, 
+           fill = list(relAb = 10^-3))
+
+## Now try replotting with these values filled in. Your plot should look similar to plotExamples/exampleOTUabundanceFilled.png.
+p_exampleOTUabundanceFilled <- dataOTUs
+  ### Your code here.
+save_plot("plotOutputs/exampleOTUabundanceFilled.png", p_exampleOTUabundanceFilled)
+```
+
+```{r}
+## Now let's plot trajectories for multiple OTUs at once. We'll use the foreach package and function for this.
+#install.packages('foreach')
+library(foreach)
+
+# To use foreach, we need to first generate the list of items to loop over. For now, this will be the list of OTUs in the Tannerellaceae family.
+OTUlist <- unique(dataOTUs %>% filter(Family=="Tannerellaceae") %>% pull(OTUID))
+
+# Now use the foreach() function to loop over OTUs and generate individual relative abundance plots.
+# Examples of what these plots should look like can be found in plotExamples/OTUabundances.
+foreach(x = OTUlist) %do% {
+  p_currOTUPlot <- dataOTUs %>% 
+    filter(OTUID == x) %>%
+    ### Your code here.
+    ggplot() +
+    ### Your code here.
+    ggtitle(x)
+  save_plot(paste0("plotOutputs/OTUabundances/", x, ".png"), p_currOTUPlot)
+}
+```
+
+```{r}
+## It can sometimes be useful to plot the relative abundances of different families in each community in the same way as individual OTUs - for instance, if you are trying to analyze whether there are relative abundance changes at the level of individual species within a family but overall family-level relative abundance is conserved, which might suggest functional redundancy or similarity among species within each family. As a more challenging exercise, try plotting the family-level relative abundances of a set of families in the data, using the functions you have been introduced to in the last several exercises!
+
+## Your final plots should look similar to those in plotExamples/familyAbundances.
+
+familyList <- c("Bacteroidaceae", "Enterobacteriaceae", "Lachnospiraceae", "Tannerellaceae", "Streptococcaceae")
+
+# Use the group_by() and summarize() functions to add a family-level relative abundance column to the data.
+dataFamilyAbundance <- data %>% 
+  filter(Family %in% familyList)
+  ### Your code here.
+  # Make sure to set the values of family relative abundance to 10^-3 if they are below the limit of detection.
+
+foreach(x = familyList) %do% {
+  ### Your code here.
+}
+```
+
+```{r}
+## Now let's import another dataframe with an additional metadata feature: multiple replicates of each community.
+
+dataReplicate <- read.table("data/data-replicate.tsv", header=TRUE, sep="\t")
+
+## Try redoing the analyses we previously completed on this new dataset to generate the plots in the plotExamples/replicates directory. This will require: 
+## 1. Filtering to OTUs present at >=10^-3 relative abundance. 
+
+### Your code here.
+
+## 2. Counting and plotting the OTUs per sample (OTUcountsAll.png).
+
+dataReplicateOTUcounts <- dataReplicate()
+  ### Your code here.
+
+p_otuCountsAll <- dataReplicateOTUcounts()
+  ### Your code here.
+save_plot("plotOutputs/replicates/OTUcountsAll.png", p_otuCountsAll)
+
+## 3. Plotting relative abundances as a series of stacked bar plots. Note that in this step you should use mutate() and paste() to generate a new variable that indicates both passage and replicate (passage_replicate) for the x-axis of the plot (relAbAll.png).
+
+p_relAbAllReplicates <- dataReplicate() %>% 
+  # Add the new passage_replicate variable before calling ggplot().
+  mutate() %>% 
+  ggplot()
+  ### Your code here.
+save_plot("plotOutputs/replicates/relAbAll.png", p_relAbAllReplicates, nrow=2, ncol=3)
+
+## 4. Plotting the correlation scatterplot of OTU relative abundances between both replicates at passage 2 and antibiotic concentration 2 ug/mL, for each community (repScatter.png). This exercise will make use of a new left_join() function to add the columns of the dataframe containing correlation values for each source community to the primary wide format dataframe.
+
+dataWideReplicates <- dataReplicate() 
+  ### Your code here.
+
+### Fill in lm() to calculate correlations between replicates for each source community separately
+# Make sure to also remove OTUs whose relative abundances are 0 in both replicates.
+repCorA <- lm()
+repCorB <- lm()
+repCorC <- lm()
+repCorD <- lm()
+# Extract the r^2 values for each source community separately.
+corA_r2 <- round(summary(repCorA)$r.squared, 2)
+corB_r2 <- round(summary(repCorB)$r.squared, 2)
+corC_r2 <- round(summary(repCorC)$r.squared, 2)
+corD_r2 <- round(summary(repCorD)$r.squared, 2)
+# Create a new dataframe with two columns: the source community, and the r^2 value for each.
+repCor <- data.frame(src_community = c("A", "B", "C", "D"),
+                     cor = c(corA_r2, corB_r2, corC_r2, corD_r2))
+
+# Use left_join() to add the new dataframe's columns to the primary dataframe, based on the values of a shared column.
+dataWideReplicates <- dataWideReplicates %>% 
+  left_join(repCor)
+  ### Add a column for the r^2 label that will be plotted, using mutate() and paste0()
+
+p_repScatter <- dataWideReplicates()
+  ### Your code here.
+save_plot("plotOutputs/replicates/repScatter.png", p_repScatter, nrow = 2, ncol = 2.5)
+
+```
+
