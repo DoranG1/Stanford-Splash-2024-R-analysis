@@ -10,8 +10,9 @@ library(tidyverse)
 ```{r}
 # Import the OTU data.
 data <- read.table("data/data.tsv", header=TRUE, sep="\t")
+# View the dataframe.
 view(data)
-# Access the first six rows of the dataframe.
+# View just the first few rows (head() defaults to 6 rows) of the dataframe.
 head(data)
 # Print the unique values of the three variables that define each unique community.
 unique(data$src_community)
@@ -20,10 +21,7 @@ unique(data$abxConcentration)
 ```
 
 ```{r}
-# Use ggplot to plot a histogram of the raw counts of each OTU across all samples.
-
-# Set a plot theme from the cowplot package.
-theme_set(theme_cowplot())
+# Use ggplot to plot a histogram of the sequencing raw counts of each OTU across all samples.
 
 data %>% 
   # Create a new ggplot canvas.
@@ -32,18 +30,21 @@ data %>%
   # Aesthetic automatically draws column names from the dataframe you pass to ggplot().
   geom_histogram(aes(x=count))
 
-# Remove count values of 0 and replot.
+# Our histogram contains mostly 0 values, because many OTUs were not detected in the majority of samples. Let's remove values of 0 from the raw counts and replot.
 data %>% 
   # Use dplyr::filter() to remove 0 values.
+  ## Note: one useful feature of R is that you can use ? to look up the documentation for any function. For instance, try typing ?filter() into the console. You can also use ?? to look up functions with related keywords.
   filter(count != 0) %>% 
   ggplot() +
   # Also plot counts on a log10 scale to make them easier to visualize.
   geom_histogram(aes(x=log10(count)))
 
-# Retrieve the log10 counts with 0s removed.
+# R can also be used to check data distributions using the summary() function.
+# Retrieve the log10 counts with 0s removed from the full dataframe.
 logCounts <- log10(
   data %>% 
-  filter(count != 0) %>% 
+  filter(count != 0) %>%
+  # The pull() function extracts a single column variable from the full dataframe.
   pull(count)
   )
 # Summarize the log10 distribution of counts across all samples.
@@ -51,7 +52,7 @@ summary(logCounts)
 ```
 
 ```{r}
-# Plot the diversity of OTUs within each sample.
+# Let's plot the diversity of OTUs within each sample.
 
 # Add an OTU diversity count variable.
 dataOTUcounts <- data %>%
@@ -81,16 +82,16 @@ dataOTUcounts %>%
   # Y-axis scale.
   ylim(0, 150) +
   # Plot title.
-  ggtitle("OTU counts, 0 ug/mL")
+  ggtitle("OTU diversity, 0 ug/mL")
 
 # Now plot all three antibiotic concentrations using the facet_wrap() function.
 dataOTUcounts %>% 
   ggplot() +
   geom_line(aes(x = factor(passage), y = OTUcount, group = src_community, color = src_community)) +
   xlab("Passage") +
-  ylab("OTU diversity") +
+  ylab("OTU count") +
   ylim(0, 150) +
-  ggtitle("OTU counts") +
+  ggtitle("OTU diversity") +
   # Separate plots into different panels based on antibiotic concentration.
   facet_wrap(~abxConcentration) +
   # Set legend title and colors manually.
@@ -116,12 +117,12 @@ library(cowplot)
 theme_set(theme_cowplot())
 
 # Plot the composition of an example community A at passage 7 with antibiotic concentration 2 ug/mL.
-p_relAb <- data %>% 
+data %>% 
   filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
   ggplot() +
   # Plot a stacked bar plot where species relative abundances are separated by black lines and colored by family.
-  geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black")
-p_relAb
+  geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
+  ggtitle("Composition of community A")
 
 ## Note the legend is currently way too large to see the plot! Using cowplot we can extract and plot the legend separately, and replot the main plot without the legend.
 
@@ -130,12 +131,13 @@ data %>%
   filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
   ggplot() +
   geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
+  ggtitle("Composition of community A") +
   # Hide the plot legend.
   theme(legend.position = "none")
 
 ## We can also import our own color palette.
 # Import color palette file.
-read.table("config/palette.txt", header = TRUE, stringsAsFactors = FALSE)
+palette <- read.table("config/palette.txt", header = TRUE)
 # Convert the color palette to a named vector for ggplot to map family IDs to color hexes.
 paletteVector <- palette$hex
 names(paletteVector) <- palette$Family
@@ -145,6 +147,7 @@ data %>%
   filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
   ggplot() +
   geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
+  ggtitle("Composition of community A") +
   scale_fill_manual(values = paletteVector)
 
 ## Now try plotting multiple communities at once: include all passages (as the x variable) and antibiotic concentrations (as a faceting variable) from source community A.
@@ -153,7 +156,11 @@ p_relAbAllA <- data
 p_relAbAllA
 # Save your plot using the following code: it should look identical to the one in plotExamples/relAbAllA.png.
 save_plot("plotOutputs/relAbAllA.png", p_relAbAllA, nrow = 1.5, ncol = 3)
+```
 
+Interpretation question #1: Are there certain families in community A that seem to generally survive better or worse during the antibiotic perturbation? What might be some biological reasons for this to be the case?
+
+```{r}
 ## You can also facet by multiple variables at a time using facet_grid(~x~y). Try plotting all passages and antibiotic communities from all four source communities at once:
 p_relAbAllCommunities <- data
   ### Your code here.
@@ -162,8 +169,10 @@ p_relAbAllCommunities
 save_plot("plotOutputs/relAbAllCommunities.png", p_relAbAllCommunities, nrow = 2, ncol = 3)
 ```
 
+Interpretation question #2: Which communities show more recovery to their initial, pre-antibiotic state? Which ones don't? Why might some communities show more recovery than others?
+
 ```{r}
-## A common feature of microbiome sequencing data is a 'limit of detection,' which is the lowest abundance of a species that can be reliably detected given the sequencing depth. For instance, these samples each received at least 10^4 reads, so if we want at least 10 reads per species per sample, we should set our inferred detection limit to 10^-3 relative abundance per species.
+## A common feature of microbiome sequencing data is a 'limit of detection,' which is the lowest abundance of a species that can be reliably detected given the sequencing depth. For instance, these samples each received at least 10^4 reads, with some variation, so if we want at least 10 reads per species per sample, we should set our inferred detection limit to 10^-3 relative abundance per species.
 
 # Try filtering the data to include only species present above 10^-3 relative abundance, and re-calculate the OTU diversity within each community based on this filtered data.
 # Your final plot should look identical to the one in plotExamples/OTUcountsFiltered.png
@@ -176,10 +185,14 @@ p_OTUcountsFiltered
 save_plot("plotOutputs/OTUcountsFiltered.png", p_OTUcountsFiltered)
 ```
 
+Interpretation question #3: Which communities recover in diversity at which doses?
+
+Interpretation question #4: What are potential drawbacks of considering only OTU presence/absence and not abundance?
+
 ```{r}
 ## R is also commonly used to perform statistical tests like linear regressions or t-tests. Let's plot and check the correlation between relative abundance values for the same OTUs across different antibiotic concentrations of a community at the same passage.
 
-## To plot this, we need our data to be in the wide, rather than the long format.
+## To plot this, we need our data to be in the wide, rather than the long format. 
 dataWideCommAP2 <- data %>% 
   # Compare just the A community and passage 2.
   filter(src_community=="A" & passage==2) %>% 
@@ -199,7 +212,8 @@ dataWideCommAP2 %>%
   ylim(0, 0.5) +
   scale_color_manual(values = paletteVector) +
   xlab("Relative abundance, 0 ug/mL") +
-  ylab("Relative abundance, 2 ug/mL")
+  ylab("Relative abundance, 2 ug/mL") +
+  ggtitle("Relative abundance comparison, community A passage 2")
 
 # Calculate the correlation between relative abundances at 0 vs. 2 ug/mL.
 commAP0P2cor <- lm((dataWideCommAP2 %>% filter(`0` != 0 | `2` != 0))$`2` ~ 
@@ -224,7 +238,8 @@ dataWideCommAP2 %>%
   ylim(0, 0.5) +
   scale_color_manual(values = paletteVector) +
   xlab("Relative abundance, 0 ug/mL") +
-  ylab("Relative abundance, 2 ug/mL")
+  ylab("Relative abundance, 2 ug/mL") +
+  ggtitle("Relative abundance comparison, community A passage 2")
 ```
 
 ```{r}
@@ -242,6 +257,10 @@ p_OTUcountScatterP2
 save_plot("plotOutputs/OTUcountScatterP2.png", p_OTUcountScatterP2)
 ```
 
+Interpretation question #5: Which communities look more similar in OTU diversity across doses?
+
+Interpretation question #6: Another plot we could have made is one analogous to our relative abundance scatterplot from before but with raw sequencing counts: with the sequencing count for each OTU from 0 ug/ml at passage 2 of community A on the x-axis and the count for each OTU from 2 ug/ml on the y-axis. From a technical perspective, considering how 16S sequencing works, why would plotting these raw sequencing counts be an unsound analysis compared to plotting relative abundance? Hint: think about the reason why we set a limit of detection on relative abundance!
+
 ```{r}
 ## Let's get into the weeds of the data a little more. We'll now plot the relative abundances of individual OTUs in communities to see how different species may have been affected by the antibiotic treatment. 
 
@@ -258,6 +277,7 @@ OTUexample <- "Lachnospiraceae-309"
 ## Try plotting this OTU's log10 relative abundance with passages on the x-axis, different lines for antibiotic concentrations, and faceted by community! Your final plot should look similar to plotExamples/exampleOTUabundance.png.
 p_exampleOTUabundance <- dataOTUs
   ### Your code here.
+save_plot("plotOutputs/exampleOTUabundance.png", p_exampleOTUabundance)
 
 ## You might notice that in this plot, we are continuing to include several relative abundance values below 10^-3, which is below our chosen limit of detection, and that there are also some points missing where the OTU was simply not detected in a sample. Let's fix the first issue by setting values of relAb that are below 10^-3 to 10^-3 in the data.
 dataOTUs <- dataOTUs %>%
@@ -300,6 +320,10 @@ foreach(x = OTUlist) %do% {
 }
 ```
 
+Interpretation question #7: Why might OTUs exhibit different behaviors across communities? 
+
+Interpretation question #8: Why might OTU relative abundances sometimes increase during the antibiotic perturbation (passage 2)?
+
 ```{r}
 ## It can sometimes be useful to plot the relative abundances of different families in each community in the same way as individual OTUs - for instance, if you are trying to analyze whether there are relative abundance changes at the level of individual species within a family but overall family-level relative abundance is conserved, which might suggest functional redundancy or similarity among species within each family. As a more challenging exercise, try plotting the family-level relative abundances of a set of families in the data, using the functions you have been introduced to in the last several exercises!
 
@@ -314,9 +338,13 @@ dataFamilyAbundance <- data %>%
   # Make sure to set the values of family relative abundance to 10^-3 if they are below the limit of detection.
 
 foreach(x = familyList) %do% {
-  ### Your code here.
+  p_currFamPlot <- dataFamilyAbundance
+    ### Your code here.
+  save_plot(paste0("plotOutputs/familyAbundances/", x, ".png"), p_currFamPlot)
 }
 ```
+
+Interpretation question #9: Note that the relative abundance of the Tannerellaceae family remains high in the B community at passage 7, even at the highest antibiotic concentration. How many individual OTUs are present from this family at high abundance (above the limit of detection) in this community? You can count this by looking at the plots, or you can answer it using R!
 
 ```{r}
 ## Now let's import another dataframe with an additional metadata feature: multiple replicates of each community.
@@ -336,7 +364,11 @@ dataReplicateOTUcounts <- dataReplicate()
 p_otuCountsAll <- dataReplicateOTUcounts()
   ### Your code here.
 save_plot("plotOutputs/replicates/OTUcountsAll.png", p_otuCountsAll)
+```
 
+Interpretation question #10: Which communities show the greatest divergence in OTU diversity between replicates? What are some potential biological or technical explanations for this divergence?
+
+```{r}
 ## 3. Plotting relative abundances as a series of stacked bar plots. Note that in this step you should use mutate() and paste() to generate a new variable that indicates both passage and replicate (passage_replicate) for the x-axis of the plot (relAbAll.png).
 
 p_relAbAllReplicates <- dataReplicate() %>% 
@@ -345,13 +377,19 @@ p_relAbAllReplicates <- dataReplicate() %>%
   ggplot()
   ### Your code here.
 save_plot("plotOutputs/replicates/relAbAll.png", p_relAbAllReplicates, nrow=2, ncol=3)
+```
 
+Interpretation question #11: Which communities show the most divergence in composition between replicates? 
+
+Interpretation question #12: Are there families that seem to be more frequently different between replicates?
+
+```{r}
 ## 4. Plotting the correlation scatterplot of OTU relative abundances between both replicates at passage 2 and antibiotic concentration 2 ug/mL, for each community (repScatter.png). This exercise will make use of a new left_join() function to add the columns of the dataframe containing correlation values for each source community to the primary wide format dataframe.
 
 dataWideReplicates <- dataReplicate() 
   ### Your code here.
 
-### Fill in lm() to calculate correlations between replicates for each source community separately
+## Fill in lm() to calculate correlations between replicates for each source community separately
 # Make sure to also remove OTUs whose relative abundances are 0 in both replicates.
 repCorA <- lm()
 repCorB <- lm()
@@ -374,6 +412,6 @@ dataWideReplicates <- dataWideReplicates %>%
 p_repScatter <- dataWideReplicates()
   ### Your code here.
 save_plot("plotOutputs/replicates/repScatter.png", p_repScatter, nrow = 2, ncol = 2.5)
-
 ```
 
+Interpretation question #13: Which OTUs drive the greatest divergence between replicates? Is the family-level relative abundance of the families to which these OTUs belong conserved/similar across replicates?
