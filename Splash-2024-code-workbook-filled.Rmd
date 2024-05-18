@@ -117,13 +117,16 @@ library(cowplot)
 theme_set(theme_cowplot())
 
 # Plot the composition of an example community A at passage 7 with antibiotic concentration 2 ug/mL.
-data %>% 
+p_relAb <- data %>% 
   filter(src_community=="A" & passage==7 & abxConcentration==2) %>% 
   ggplot() +
   # Plot a stacked bar plot where species relative abundances are separated by black lines and colored by family.
   geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
   ggtitle("Composition of community A")
+p_relAb
+```
 
+```{r}
 ## Note the legend is currently way too large to see the plot! Using cowplot we can extract and plot the legend separately, and replot the main plot without the legend.
 
 relAbLegend <- get_legend(p_relAb)
@@ -134,7 +137,9 @@ data %>%
   ggtitle("Composition of community A") +
   # Hide the plot legend.
   theme(legend.position = "none")
+```
 
+```{r}
 ## We can also import our own color palette.
 # Import color palette file.
 palette <- read.table("config/palette.txt", header = TRUE)
@@ -149,7 +154,9 @@ data %>%
   geom_bar(aes(x = src_community, y = relAb, fill = Family), stat = "identity", color="black") +
   ggtitle("Composition of community A") +
   scale_fill_manual(values = paletteVector)
+```
 
+```{r}
 ## Now try plotting multiple communities at once: include all passages (as the x variable) and antibiotic concentrations (as a faceting variable) from source community A.
 p_relAbAllA <- data %>% 
   filter(src_community=="A") %>% 
